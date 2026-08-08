@@ -2,84 +2,65 @@ name: Build & Release
 
 on:
   push:
-分支: [main, master]
-标签: ['v*']
+    branches: [main, master]
+    tags: ['v*']
   pull_request:
-分支: [main, master]
+    branches: [main, master]
 
 env:
   BUILD_TYPE: Release
 
 jobs:
-  # ==================== Linux 构建 ====================
   build-linux:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential cmake
-
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(nproc)
-
       - name: Strip binary
         run: strip build/cat-watchdog
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cat-watchdog-linux-amd64
           path: build/cat-watchdog
 
-  # ==================== Windows 构建 ====================
   build-windows:
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-
       - name: Build
-        run: cmake --build build --config ${{ env.BUILD_TYPE }} -j $env:NUMBER_OF_PROCESSORS
-
+        run: cmake --build build --config ${{ env.BUILD_TYPE }}
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cat-watchdog-windows-amd64
           path: build/${{ env.BUILD_TYPE }}/cat-watchdog.exe
 
-  # ==================== macOS 构建 ====================
   build-macos:
     runs-on: macos-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
+      - uses: actions/checkout@v4
       - name: Configure CMake
         run: cmake -B build -DCMAKE_BUILD_TYPE=${{ env.BUILD_TYPE }}
-
       - name: Build
         run: cmake --build build --config ${{ env.BUILD_TYPE }} -j$(sysctl -n hw.ncpu)
-
       - name: Strip binary
         run: strip build/cat-watchdog
-
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: cat-watchdog-macos-amd64
           path: build/cat-watchdog
 
-  # ==================== 自动发布 Release ====================
   release:
     needs: [build-linux, build-windows, build-macos]
     runs-on: ubuntu-latest
@@ -87,11 +68,9 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-
       - name: Package binaries
         run: |
           mkdir -p release
@@ -104,7 +83,6 @@ jobs:
               zip -j "../release/${name}.zip" "$dir/cat-watchdog.exe"
             fi
           done
-
       - name: Create Release
         uses: softprops/action-gh-release@v2
         with:
