@@ -22,7 +22,7 @@ namespace cwd {
 
 class SimpleHttpClient {
 public:
-    static std::pair<bool, std::string> request(
+    static std::pair<bool, std::string> 请求(
         const std::string& method,
         const std::string& url,
         const std::vector<std::pair<std::string, std::string>>& headers,
@@ -43,7 +43,7 @@ public:
         size_t pos = url.find("://");
         if (pos != std::string::npos) {
             std::string scheme = url.substr(0, pos);
-            if (scheme == "https") { ssl = true; port = 443; }
+            if (scheme == "https") { port = 443; }
             pos += 3;
         } else {
             pos = 0;
