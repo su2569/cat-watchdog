@@ -40,8 +40,6 @@ public:
 
         std::string host, path = "/";
         int port = 80;
-        bool ssl = false;
-
         size_t pos = url.find("://");
         if (pos != std::string::npos) {
             std::string scheme = url.substr(0, pos);

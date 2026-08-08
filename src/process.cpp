@@ -83,7 +83,9 @@ ProcessStartResult ProcessManager::start(
 
     if (pid == 0) {
         if (!working_dir.empty()) {
-            chdir(working_dir.c_str());
+            if (chdir(working_dir.c_str()) != 0) {
+                _exit(126);
+            }
         }
 
         std::vector<char*> argv;
@@ -116,6 +118,7 @@ ProcessStartResult ProcessManager::start(
 }
 
 bool ProcessManager::stop(uint64_t pid, uint64_t handle) {
+    (void)handle; // 在 Linux 上不使用
     if (pid == INVALID_PROC_ID) return false;
 
 #ifdef _WIN32
@@ -149,6 +152,7 @@ bool ProcessManager::is_alive(uint64_t pid) {
 }
 
 ProcessStatus ProcessManager::get_status(uint64_t pid, uint64_t handle) {
+    (void)handle; // 在 Linux 上不使用
     ProcessStatus status;
     status.pid = pid;
     status.alive = is_alive(pid);
