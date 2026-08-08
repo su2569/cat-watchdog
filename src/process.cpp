@@ -4,7 +4,6 @@
 #include <algorithm>
 
 #ifdef _WIN32
-    // 强制使用 ANSI 版本的 Windows API，避免 WCHAR 转换问题
     #ifdef UNICODE
         #undef UNICODE
     #endif
@@ -186,6 +185,65 @@ std::string ProcessManager::get_exit_reason(uint64_t pid, uint64_t handle) {
     return "unknown exit status";
 }
 
+std::vector<uint64_t> ProcessManager::find_pid_by_name(const std::string& name) {
+    std::vector<uint64_t> pids;
+    if (name.empty()) return pids;
+
+    // 提取文件名（不含路径）
+    size_t pos = name.find_last_of("/\\");
+    std::string base_name = (pos != std::string::npos) ? name.substr(pos + 1) : name;
+
+#ifdef _WIN32
+    HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+    if (snapshot == INVALID_HANDLE_VALUE) return pids;
+
+    PROCESSENTRY32 pe;
+    pe.dwSize = sizeof(pe);
+
+    if (Process32First(snapshot, &pe)) {
+        do {
+            std::string proc_name(pe.szExeFile);
+            if (proc_name == base_name || proc_name.find(base_name) != std::string::npos) {
+                pids.push_back(static_cast<uint64_t>(pe.th32ProcessID));
+            }
+        } while (Process32Next(snapshot, &pe));
+    }
+    CloseHandle(snapshot);
+#else
+    DIR* dir = opendir("/proc");
+    if (!dir) return pids;
+
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        if (entry->d_type != DT_DIR) continue;
+        char* endptr;
+        long pid_val = strtol(entry->d_name, &endptr, 10);
+        if (*endptr != '\0') continue;
+
+        std::string cmdline_path = std::string("/proc/") + entry->d_name + "/comm";
+        int fd = open(cmdline_path.c_str(), O_RDONLY);
+        if (fd < 0) continue;
+
+        char buf[256];
+        ssize_t n = read(fd, buf, sizeof(buf) - 1);
+        close(fd);
+        if (n <= 0) continue;
+
+        buf[n] = '\0';
+        // 移除末尾换行
+        if (n > 0 && buf[n - 1] == '\n') buf[n - 1] = '\0';
+
+        std::string proc_name(buf);
+        if (proc_name == base_name || proc_name.find(base_name) != std::string::npos) {
+            pids.push_back(static_cast<uint64_t>(pid_val));
+        }
+    }
+    closedir(dir);
+#endif
+
+    return pids;
+}
+
 bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
 #ifdef _WIN32
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
@@ -196,8 +254,8 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
 
     if (Process32First(snapshot, &pe)) {
         do {
-            std::string name(pe.szExeFile);
-            if (name.find(cmd) != std::string::npos || cmd.find(name) != std::string::npos) {
+            std::string proc_name(pe.szExeFile);
+            if (proc_name.find(cmd) != std::string::npos || cmd.find(proc_name) != std::string::npos) {
                 HANDLE h = OpenProcess(PROCESS_TERMINATE, FALSE, pe.th32ProcessID);
                 if (h) {
                     TerminateProcess(h, 1);

@@ -3,6 +3,7 @@
 #include <csignal>
 #include <thread>
 #include <chrono>
+#include <fstream>
 
 #ifdef _WIN32
     #include <windows.h>
@@ -28,12 +29,6 @@ SystemInfo SystemMonitor::get_info() {
 
 #ifdef _WIN32
     info.platform = "Windows";
-    // CPU
-    FILETIME idle, kernel, user;
-    if (GetSystemTimes(&idle, &kernel, &user)) {
-        // 简化处理
-    }
-    // Memory
     MEMORYSTATUSEX mem = {0};
     mem.dwLength = sizeof(mem);
     if (GlobalMemoryStatusEx(&mem)) {
@@ -41,9 +36,7 @@ SystemInfo SystemMonitor::get_info() {
         info.memory_used_bytes = mem.ullTotalPhys - mem.ullAvailPhys;
         info.memory_used_percent = mem.dwMemoryLoad;
     }
-    // Uptime
     info.uptime_seconds = GetTickCount64() / 1000;
-    // Hostname
     char buf[256];
     DWORD len = sizeof(buf);
     if (GetComputerNameA(buf, &len)) {
@@ -55,7 +48,6 @@ SystemInfo SystemMonitor::get_info() {
         info.platform = std::string(un.sysname) + " " + un.release;
     }
 
-    // Memory
     auto meminfo = [](const std::string& key) -> uint64_t {
         std::ifstream ifs("/proc/meminfo");
         std::string line;
@@ -77,13 +69,11 @@ SystemInfo SystemMonitor::get_info() {
         info.memory_used_percent = static_cast<double>(total - available) / total * 100.0;
     }
 
-    // Uptime
     std::ifstream ifs("/proc/uptime");
     double up = 0;
     ifs >> up;
     info.uptime_seconds = static_cast<uint64_t>(up);
 
-    // Hostname
     char buf[256];
     if (gethostname(buf, sizeof(buf)) == 0) {
         info.hostname = buf;

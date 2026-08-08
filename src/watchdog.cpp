@@ -49,6 +49,37 @@ bool WatchdogEngine::initialize(const std::string& config_path) {
         CWD_LOG_INFO("未启用通知后端");
     }
 
+    // 5. 启动前检测：查找是否已有同名进程在运行
+    auto& processes = const_cast<std::vector<ProcessConfig>&>(cfg.processes());
+    for (auto& pc : processes) {
+        if (!pc.enabled) continue;
+
+        auto existing_pids = ProcessManager::find_pid_by_name(pc.cmd);
+        if (!existing_pids.empty()) {
+            // 过滤掉看门狗自己（避免误检测）
+            uint64_t self_pid = 0;
+#ifdef _WIN32
+            self_pid = static_cast<uint64_t>(GetCurrentProcessId());
+#else
+            self_pid = static_cast<uint64_t>(getpid());
+#endif
+            bool found_alive = false;
+            for (uint64_t pid : existing_pids) {
+                if (pid == self_pid) continue;
+                if (ProcessManager::is_alive(pid)) {
+                    pc.pid = pid;
+                    pc.is_running = true;
+                    found_alive = true;
+                    CWD_LOG_INFO("检测到进程已在运行: " + pc.name + " PID=" + std::to_string(pid));
+                    break;
+                }
+            }
+            if (!found_alive) {
+                CWD_LOG_INFO("未检测到运行中的进程: " + pc.name + "，将启动新实例");
+            }
+        }
+    }
+
     stats_.start_time = std::chrono::steady_clock::now();
     return true;
 }
@@ -164,7 +195,7 @@ MonitorResult WatchdogEngine::monitor_process(ProcessConfig& pc) {
             if (start_process(pc)) {
                 result.success = true;
                 result.was_restarted = true;
-                result.message = "进程已重启，PID=" + std::to_string(pc.pid.load()) + 
+                result.message = "进程已重启，PID=" + std::to_string(pc.pid.load()) +
                                  " (第 " + std::to_string(pc.restart_count.load()) + " 次)";
                 Notifier::instance().notify_process_restarted(pc.name, pc.restart_count.load());
 
@@ -190,6 +221,24 @@ MonitorResult WatchdogEngine::monitor_process(ProcessConfig& pc) {
 }
 
 bool WatchdogEngine::start_process(ProcessConfig& pc) {
+    // 启动前再次检测，避免重复启动
+    auto existing_pids = ProcessManager::find_pid_by_name(pc.cmd);
+    uint64_t self_pid = 0;
+#ifdef _WIN32
+    self_pid = static_cast<uint64_t>(GetCurrentProcessId());
+#else
+    self_pid = static_cast<uint64_t>(getpid());
+#endif
+    for (uint64_t pid : existing_pids) {
+        if (pid == self_pid) continue;
+        if (ProcessManager::is_alive(pid)) {
+            pc.pid = pid;
+            pc.is_running = true;
+            CWD_LOG_INFO("进程已在运行，直接接管: " + pc.name + " PID=" + std::to_string(pid));
+            return true;
+        }
+    }
+
     auto res = ProcessManager::start(pc.cmd, pc.args, pc.working_dir, pc.show_window);
 
     if (res.success) {

@@ -3,6 +3,10 @@
 #include <iostream>
 #include <iomanip>
 
+#ifdef _WIN32
+#include <windows.h>
+#endif
+
 namespace cwd {
 
 Logger& Logger::instance() {
@@ -46,11 +50,30 @@ void Logger::log(LogLevel level, const std::string& msg) {
     std::string line = "[" + get_timestamp() + "] [" + level_to_string(level) + "] " + msg;
 
     if (console_.load()) {
+#ifdef _WIN32
+        // Windows 控制台输出 UTF-8
+        HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
+        if (level >= LogLevel::Error) {
+            hOut = GetStdHandle(STD_ERROR_HANDLE);
+        }
+        if (hOut != INVALID_HANDLE_VALUE) {
+            DWORD written;
+            WriteConsoleA(hOut, line.c_str(), static_cast<DWORD>(line.size()), &written, nullptr);
+            WriteConsoleA(hOut, "\n", 1, &written, nullptr);
+        } else {
+            if (level >= LogLevel::Error) {
+                std::cerr << line << std::endl;
+            } else {
+                std::cout << line << std::endl;
+            }
+        }
+#else
         if (level >= LogLevel::Error) {
             std::cerr << line << std::endl;
         } else {
             std::cout << line << std::endl;
         }
+#endif
     }
 
     if (file_.load()) {
@@ -83,6 +106,13 @@ void Logger::rotate_if_needed() {
         if (ofs_.is_open()) ofs_.close();
         current_file_ = new_file;
         ofs_.open(current_file_, std::ios::app);
+#ifdef _WIN32
+        // Windows 日志文件写入 UTF-8 BOM
+        if (ofs_.is_open()) {
+            unsigned char bom[] = {0xEF, 0xBB, 0xBF};
+            ofs_.write(reinterpret_cast<char*>(bom), 3);
+        }
+#endif
     }
 }
 
