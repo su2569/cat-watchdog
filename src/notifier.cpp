@@ -22,7 +22,7 @@ namespace cwd {
 
 class SimpleHttpClient {
 public:
-    static std::pair<bool, std::string> 请求(
+    static std::pair<bool, std::string> request(
         const std::string& method,
         const std::string& url,
         const std::vector<std::pair<std::string, std::string>>& headers,

@@ -1,4 +1,5 @@
 #include "watchdog.hpp"
+#include <iostream>
 #include "logger.hpp"
 #include "system.hpp"
 #include "config.hpp"
