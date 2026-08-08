@@ -7,6 +7,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 # 平台检测
 if(WIN32)
     add_definitions(-DUNICODE -D_UNICODE -DWIN32_LEAN_AND_MEAN -DNOMINMAX)
+    add_definitions(-D_CRT_SECURE_NO_WARNINGS -D_WINSOCK_DEPRECATED_NO_WARNINGS)
     set(PLATFORM_LIBS ws2_32)
 elseif(UNIX)
     set(PLATFORM_LIBS pthread)
@@ -23,10 +24,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# 头文件目录
 include_directories(${CMAKE_SOURCE_DIR}/include)
 
-# 源文件
 set(SOURCES
     src/main.cpp
     src/config.cpp
@@ -45,7 +44,6 @@ target_link_libraries(cat-watchdog
         ${PLATFORM_LIBS}
 )
 
-# 安装
 install(TARGETS cat-watchdog DESTINATION bin)
 install(FILES config/cw.json.example DESTINATION share/cat-watchdog)
 install(FILES tools/sender.py DESTINATION share/cat-watchdog/tools)
