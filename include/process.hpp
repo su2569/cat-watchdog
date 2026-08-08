@@ -59,6 +59,9 @@ public:
     static bool kill_by_cmdline(const std::string& cmd);
     static bool kill_by_path(const std::string& path);
 
+    // 通过进程名查找已运行的 PID（用于启动时检测）
+    static std::vector<uint64_t> find_pid_by_name(const std::string& name);
+
     // 执行命令并获取输出（仅 Unix）
     static std::string exec(const std::string& cmd);
 
