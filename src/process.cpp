@@ -4,6 +4,13 @@
 #include <algorithm>
 
 #ifdef _WIN32
+    // 强制使用 ANSI 版本的 Windows API，避免 WCHAR 转换问题
+    #ifdef UNICODE
+        #undef UNICODE
+    #endif
+    #ifdef _UNICODE
+        #undef _UNICODE
+    #endif
     #include <windows.h>
     #include <tlhelp32.h>
     #include <psapi.h>
@@ -184,10 +191,10 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) return false;
 
-    PROCESSENTRY32A pe;
+    PROCESSENTRY32 pe;
     pe.dwSize = sizeof(pe);
 
-    if (Process32FirstA(snapshot, &pe)) {
+    if (Process32First(snapshot, &pe)) {
         do {
             std::string name(pe.szExeFile);
             if (name.find(cmd) != std::string::npos || cmd.find(name) != std::string::npos) {
@@ -197,7 +204,7 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
                     CloseHandle(h);
                 }
             }
-        } while (Process32NextA(snapshot, &pe));
+        } while (Process32Next(snapshot, &pe));
     }
     CloseHandle(snapshot);
     return true;
