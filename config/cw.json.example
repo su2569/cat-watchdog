@@ -1,0 +1,56 @@
+{
+    "watchdog": {
+        "check_interval_sec": 5,
+        "log_level": 2,
+        "log_dir": "logs",
+        "console_log": true,
+        "file_log": true,
+        "restart_delay_sec": 3
+    },
+    "processes": [
+        {
+            "name": "my-bot",
+            "cmd": "python3",
+            "args": ["bot.py", "--production"],
+            "working_dir": "/opt/mybot",
+            "restart": true,
+            "max_restart": 10,
+            "restart_delay_sec": 5,
+            "show_window": false,
+            "enabled": true
+        },
+        {
+            "name": "redis-server",
+            "cmd": "redis-server",
+            "args": ["/etc/redis/redis.conf"],
+            "working_dir": "",
+            "restart": true,
+            "max_restart": 0,
+            "restart_delay_sec": 3,
+            "show_window": false,
+            "enabled": true
+        }
+    ],
+    "onebot": {
+        "enabled": true,
+        "ws_url": "http://127.0.0.1:3000",
+        "access_token": "your-token-here",
+        "notify_groups": ["123456789"],
+        "notify_users": [],
+        "reconnect_interval_sec": 10
+    },
+    "http_reporter": {
+        "enabled": true,
+        "url": "http://127.0.0.1:8080/api/status",
+        "method": "POST",
+        "headers": {
+            "X-API-Key": "your-api-key"
+        },
+        "timeout_sec": 10,
+        "retry_count": 3,
+        "retry_delay_sec": 5,
+        "report_on_start": true,
+        "report_on_change": true,
+        "report_interval_sec": 60
+    }
+}
