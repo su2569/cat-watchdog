@@ -13,15 +13,15 @@ using json = nlohmann::json;
 
 // 进程配置
 struct ProcessConfig {
-    std::string name;              // 进程标识名
-    std::string cmd;               // 可执行文件路径
-    std::vector<std::string> args; // 启动参数
-    std::string working_dir;       // 工作目录
-    bool restart = true;           // 崩溃后是否自动重启
-    int max_restart = 0;           // 最大重启次数（0=无限）
-    int restart_delay_sec = 3;     // 重启间隔（秒）
-    bool show_window = true;       // 是否显示窗口（Windows）
-    bool enabled = true;           // 是否启用监控
+    std::string name;
+    std::string cmd;
+    std::vector<std::string> args;
+    std::string working_dir;
+    bool restart = true;
+    int max_restart = 0;
+    int restart_delay_sec = 3;
+    bool show_window = true;
+    bool enabled = true;
 
     // 运行时状态（非配置项）
     std::atomic<bool> is_running{false};
@@ -29,19 +29,87 @@ struct ProcessConfig {
     std::atomic<uint64_t> pid{0};
     std::atomic<uint64_t> handle{0};
     std::string last_exit_reason;
+
+    // 默认构造
+    ProcessConfig() = default;
+
+    // 拷贝构造（手动处理 atomic）
+    ProcessConfig(const ProcessConfig& other)
+        : name(other.name), cmd(other.cmd), args(other.args),
+          working_dir(other.working_dir), restart(other.restart),
+          max_restart(other.max_restart), restart_delay_sec(other.restart_delay_sec),
+          show_window(other.show_window), enabled(other.enabled),
+          is_running(other.is_running.load()),
+          restart_count(other.restart_count.load()),
+          pid(other.pid.load()),
+          handle(other.handle.load()),
+          last_exit_reason(other.last_exit_reason) {}
+
+    // 拷贝赋值
+    ProcessConfig& operator=(const ProcessConfig& other) {
+        if (this != &other) {
+            name = other.name;
+            cmd = other.cmd;
+            args = other.args;
+            working_dir = other.working_dir;
+            restart = other.restart;
+            max_restart = other.max_restart;
+            restart_delay_sec = other.restart_delay_sec;
+            show_window = other.show_window;
+            enabled = other.enabled;
+            is_running = other.is_running.load();
+            restart_count = other.restart_count.load();
+            pid = other.pid.load();
+            handle = other.handle.load();
+            last_exit_reason = other.last_exit_reason;
+        }
+        return *this;
+    }
+
+    // 移动构造
+    ProcessConfig(ProcessConfig&& other) noexcept
+        : name(std::move(other.name)), cmd(std::move(other.cmd)),
+          args(std::move(other.args)), working_dir(std::move(other.working_dir)),
+          restart(other.restart), max_restart(other.max_restart),
+          restart_delay_sec(other.restart_delay_sec),
+          show_window(other.show_window), enabled(other.enabled),
+          is_running(other.is_running.load()),
+          restart_count(other.restart_count.load()),
+          pid(other.pid.load()),
+          handle(other.handle.load()),
+          last_exit_reason(std::move(other.last_exit_reason)) {}
+
+    // 移动赋值
+    ProcessConfig& operator=(ProcessConfig&& other) noexcept {
+        if (this != &other) {
+            name = std::move(other.name);
+            cmd = std::move(other.cmd);
+            args = std::move(other.args);
+            working_dir = std::move(other.working_dir);
+            restart = other.restart;
+            max_restart = other.max_restart;
+            restart_delay_sec = other.restart_delay_sec;
+            show_window = other.show_window;
+            enabled = other.enabled;
+            is_running = other.is_running.load();
+            restart_count = other.restart_count.load();
+            pid = other.pid.load();
+            handle = other.handle.load();
+            last_exit_reason = std::move(other.last_exit_reason);
+        }
+        return *this;
+    }
 };
 
-// OneBot 配置
 struct OneBotConfig {
     bool enabled = false;
-    std::string ws_url;            // WebSocket 地址
-    std::string access_token;      // 访问令牌
-    std::vector<std::string> notify_groups; // 通知的群号
-    std::vector<std::string> notify_users;  // 通知的QQ号
+    std::string ws_url;
+    std::string access_token;
+    std::vector<std::string> notify_groups;
+    std::vector<std::string> notify_users;
     int reconnect_interval_sec = 10;
 };
 
-// HTTP 上报配置
 struct HttpReporterConfig {
     bool enabled = false;
     std::string url;
@@ -55,26 +123,22 @@ struct HttpReporterConfig {
     int report_interval_sec = 60;
 };
 
-// 看门狗全局配置
 struct WatchdogConfig {
-    int check_interval_sec = 5;    // 检查间隔
-    int log_level = 2;             // 0=trace,1=debug,2=info,3=warn,4=error
+    int check_interval_sec = 5;
+    int log_level = 2;
     std::string log_dir = "logs";
     bool console_log = true;
     bool file_log = true;
-    int restart_delay_sec = 3;     // 全局默认重启延迟
+    int restart_delay_sec = 3;
 };
 
-// 配置管理器（线程安全单例）
 class ConfigManager {
 public:
     static ConfigManager& instance();
-
     bool load(const std::string& path);
     bool reload();
     bool is_loaded() const;
 
-    // 通用配置读取
     template<typename T>
     T get(const std::string& key, const T& default_value = T{}) const;
 
