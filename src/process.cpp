@@ -28,7 +28,6 @@ ProcessStartResult ProcessManager::start(
     ProcessStartResult result;
 
 #ifdef _WIN32
-    // 构建命令行
     std::string cmdline = "\"" + cmd + "\"";
     for (const auto& arg : args) {
         cmdline += " \"" + arg + "\"";
@@ -42,7 +41,6 @@ ProcessStartResult ProcessManager::start(
     }
 
     PROCESS_INFORMATION pi = {0};
-
     std::string work_dir = working_dir.empty() ? "" : working_dir;
 
     BOOL created = CreateProcessA(
@@ -70,7 +68,6 @@ ProcessStartResult ProcessManager::start(
     CloseHandle(pi.hThread);
 
 #else
-    // Unix fork/exec
     pid_t pid = fork();
     if (pid < 0) {
         result.error_msg = "fork failed: " + std::string(strerror(errno));
@@ -79,12 +76,10 @@ ProcessStartResult ProcessManager::start(
     }
 
     if (pid == 0) {
-        // 子进程
         if (!working_dir.empty()) {
             chdir(working_dir.c_str());
         }
 
-        // 构建参数数组
         std::vector<char*> argv;
         argv.push_back(const_cast<char*>(cmd.c_str()));
         for (const auto& arg : args) {
@@ -92,7 +87,6 @@ ProcessStartResult ProcessManager::start(
         }
         argv.push_back(nullptr);
 
-        // 重定向到 /dev/null（如果不显示窗口）
         if (!show_window) {
             int fd = open("/dev/null", O_RDWR);
             if (fd >= 0) {
@@ -154,7 +148,6 @@ ProcessStatus ProcessManager::get_status(uint64_t pid, uint64_t handle) {
     status.alive = is_alive(pid);
 
     if (!status.alive) {
-        // 尝试获取退出码
 #ifdef _WIN32
         if (handle != 0) {
             HANDLE h = reinterpret_cast<HANDLE>(handle);
@@ -191,10 +184,10 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
     HANDLE snapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (snapshot == INVALID_HANDLE_VALUE) return false;
 
-    PROCESSENTRY32 pe;
+    PROCESSENTRY32A pe;
     pe.dwSize = sizeof(pe);
 
-    if (Process32First(snapshot, &pe)) {
+    if (Process32FirstA(snapshot, &pe)) {
         do {
             std::string name(pe.szExeFile);
             if (name.find(cmd) != std::string::npos || cmd.find(name) != std::string::npos) {
@@ -204,7 +197,7 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
                     CloseHandle(h);
                 }
             }
-        } while (Process32Next(snapshot, &pe));
+        } while (Process32NextA(snapshot, &pe));
     }
     CloseHandle(snapshot);
     return true;
@@ -216,7 +209,6 @@ bool ProcessManager::kill_by_cmdline(const std::string& cmd) {
 }
 
 bool ProcessManager::kill_by_path(const std::string& path) {
-    // 提取文件名
     size_t pos = path.find_last_of("/\\");
     std::string name = (pos != std::string::npos) ? path.substr(pos + 1) : path;
     if (name.empty()) return false;
@@ -235,7 +227,6 @@ std::string ProcessManager::exec(const std::string& cmd) {
         result += buffer;
     }
     pclose(pipe);
-    // 移除末尾换行
     while (!result.empty() && (result.back() == '\n' || result.back() == '\r')) {
         result.pop_back();
     }

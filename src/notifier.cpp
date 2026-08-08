@@ -20,8 +20,6 @@
 
 namespace cwd {
 
-// ==================== 简易 HTTP 客户端 ====================
-
 class SimpleHttpClient {
 public:
     static std::pair<bool, std::string> request(
@@ -40,7 +38,6 @@ public:
         }
 #endif
 
-        // 解析 URL: http://host:port/path
         std::string host, path = "/";
         int port = 80;
         bool ssl = false;
@@ -68,11 +65,14 @@ public:
             host = host.substr(0, colon);
         }
 
-        // 创建 socket
+#ifdef _WIN32
+        SOCKET sock = socket(AF_INET, SOCK_STREAM, 0);
+        if (sock == INVALID_SOCKET) return {false, "socket creation failed"};
+#else
         int sock = socket(AF_INET, SOCK_STREAM, 0);
         if (sock < 0) return {false, "socket creation failed"};
+#endif
 
-        // 解析主机
         struct hostent* he = gethostbyname(host.c_str());
         if (!he) {
 #ifdef _WIN32
@@ -88,7 +88,6 @@ public:
         addr.sin_port = htons(port);
         memcpy(&addr.sin_addr, he->h_addr_list[0], he->h_length);
 
-        // 设置超时
 #ifdef _WIN32
         DWORD timeout = timeout_sec * 1000;
         setsockopt(sock, SOL_SOCKET, SO_RCVTIMEO, (const char*)&timeout, sizeof(timeout));
@@ -110,7 +109,6 @@ public:
             return {false, "connection failed"};
         }
 
-        // 构建 HTTP 请求
         std::string req = method + " " + path + " HTTP/1.1\r\n";
         req += "Host: " + host + "\r\n";
         req += "Content-Length: " + std::to_string(body.size()) + "\r\n";
@@ -121,9 +119,12 @@ public:
         req += "\r\n";
         req += body;
 
+#ifdef _WIN32
+        send(sock, req.c_str(), static_cast<int>(req.size()), 0);
+#else
         send(sock, req.c_str(), req.size(), 0);
+#endif
 
-        // 接收响应
         std::string response;
         char buf[4096];
         int n;
@@ -177,17 +178,16 @@ bool OneBotBackend::is_ready() const {
 }
 
 void OneBotBackend::worker_loop() {
-    // 测试连接（通过 HTTP API）
     auto [ok, resp] = SimpleHttpClient::request(
         "GET", cfg_.ws_url + "/get_version_info",
         {{"Authorization", "Bearer " + cfg_.access_token}}, "", 5
     );
     if (ok && resp.find("200") != std::string::npos) {
         ready_ = true;
-        CWD_LOG_INFO("OneBot 后端已就绪: " + cfg_.ws_url);
+        CWD_LOG_INFO("OneBot backend ready: " + cfg_.ws_url);
     } else {
-        CWD_LOG_WARN("OneBot 连接测试失败，将尝试发送消息");
-        ready_ = true; // 仍然标记为就绪，尝试发送
+        CWD_LOG_WARN("OneBot connection test failed, will try sending anyway");
+        ready_ = true;
     }
 
     while (running_) {
@@ -210,7 +210,7 @@ void OneBotBackend::worker_loop() {
             );
 
             if (!success) {
-                CWD_LOG_WARN("OneBot 消息发送失败: " + msg.title);
+                CWD_LOG_WARN("OneBot send failed: " + msg.title);
             }
 
             lock.lock();
@@ -230,7 +230,7 @@ std::string OneBotBackend::build_message(const Notification& msg) const {
 
     std::string text = "[" + msg.title + "]\n" + msg.content;
     if (!msg.process_name.empty()) {
-        text += "\n进程: " + msg.process_name;
+        text += "\nProcess: " + msg.process_name;
     }
 
     j["message"] = json::array();
@@ -253,7 +253,7 @@ bool HttpReporterBackend::init() {
     ready_ = true;
     last_report_ = std::chrono::steady_clock::now();
     worker_ = std::thread(&HttpReporterBackend::worker_loop, this);
-    CWD_LOG_INFO("HTTP 上报后端已启动: " + cfg_.url);
+    CWD_LOG_INFO("HTTP reporter started: " + cfg_.url);
     return true;
 }
 
@@ -281,7 +281,7 @@ bool HttpReporterBackend::report_status(const std::vector<ProcessConfig>& proces
 
     auto now = std::chrono::steady_clock::now();
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(now - last_report_).count();
-    if (elapsed < cfg_.report_interval_sec) return true; // 未到报告间隔
+    if (elapsed < cfg_.report_interval_sec) return true;
 
     std::string body = build_status_json(processes);
     bool ok = do_http_request(body);
@@ -407,8 +407,8 @@ void Notifier::notify(const Notification& msg) {
 void Notifier::notify_process_crashed(const std::string& name, const std::string& reason) {
     Notification n;
     n.type = Notification::ProcessCrashed;
-    n.title = "进程崩溃";
-    n.content = "进程 " + name + " 已崩溃，原因: " + reason;
+    n.title = "Process Crashed";
+    n.content = "Process " + name + " crashed. Reason: " + reason;
     n.process_name = name;
     n.priority = 1;
     n.timestamp = SystemMonitor::get_timestamp();
@@ -418,8 +418,8 @@ void Notifier::notify_process_crashed(const std::string& name, const std::string
 void Notifier::notify_process_restarted(const std::string& name, int restart_count) {
     Notification n;
     n.type = Notification::ProcessRestarted;
-    n.title = "进程重启";
-    n.content = "进程 " + name + " 已重启（第 " + std::to_string(restart_count) + " 次）";
+    n.title = "Process Restarted";
+    n.content = "Process " + name + " restarted (count: " + std::to_string(restart_count) + ")";
     n.process_name = name;
     n.priority = 0;
     n.timestamp = SystemMonitor::get_timestamp();
@@ -429,8 +429,8 @@ void Notifier::notify_process_restarted(const std::string& name, int restart_cou
 void Notifier::notify_process_started(const std::string& name) {
     Notification n;
     n.type = Notification::ProcessStarted;
-    n.title = "进程启动";
-    n.content = "进程 " + name + " 已启动";
+    n.title = "Process Started";
+    n.content = "Process " + name + " started";
     n.process_name = name;
     n.timestamp = SystemMonitor::get_timestamp();
     notify(n);
@@ -439,8 +439,8 @@ void Notifier::notify_process_started(const std::string& name) {
 void Notifier::notify_process_stopped(const std::string& name) {
     Notification n;
     n.type = Notification::ProcessStopped;
-    n.title = "进程停止";
-    n.content = "进程 " + name + " 已停止";
+    n.title = "Process Stopped";
+    n.content = "Process " + name + " stopped";
     n.process_name = name;
     n.timestamp = SystemMonitor::get_timestamp();
     notify(n);
